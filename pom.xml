@@ -19,7 +19,13 @@
 		<java-target-version>1.8</java-target-version>
 		<docker-group-id>pianglesorg</docker-group-id>
 	</properties>
-
+	<repositories>
+		<repository>
+			<id>codeartifact</id>
+			<name>codeartifact</name>
+			<url>${env.CODEARTIFACT_REPO_URL}</url>
+		</repository>
+	</repositories>
 	<dependencies>
 		<dependency>
 			<groupId>org.piangles.core</groupId>
@@ -115,82 +121,6 @@
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>exec-maven-plugin</artifactId>
 				<version>${exec-maven-plugin-version}</version>
-				<executions>
-					<!-- Remove existing image from local repo -->
-					<execution>
-						<id>docker-clean</id>
-						<phase>install</phase>
-						<goals>
-							<goal>exec</goal>
-						</goals>
-						<configuration>
-							<executable>docker</executable>
-							<workingDirectory>${project.basedir}</workingDirectory>
-							<arguments>
-								<argument>rmi</argument>
-								<argument>${docker-group-id}/${project.artifactId}:${project.version}</argument>
-							</arguments>
-							<successCodes>
-								<successCode>0</successCode>
-								<successCode>1</successCode>
-							</successCodes>
-						</configuration>
-					</execution>
-					<!-- Create new docker image using Dockerfile which must be present 
-						in current working directory. Tag the image using maven project version information. -->
-					<execution>
-						<id>docker-build</id>
-						<phase>install</phase>
-						<goals>
-							<goal>exec</goal>
-						</goals>
-						<configuration>
-							<executable>docker</executable>
-							<workingDirectory>${project.basedir}</workingDirectory>
-							<arguments>
-								<argument>build</argument>
-								<argument>-t</argument>
-								<argument>${docker-group-id}/${project.artifactId}:${project.version}</argument>
-								<argument>.</argument>
-							</arguments>
-						</configuration>
-					</execution>
-					<!-- Login to a docker repo. -->
-					<execution>
-						<id>docker-login</id>
-						<phase>deploy</phase>
-						<goals>
-							<goal>exec</goal>
-						</goals>
-						<configuration>
-							<executable>docker</executable>
-							<workingDirectory>${project.basedir}</workingDirectory>
-							<arguments>
-								<argument>login</argument>
-								<argument>-u</argument>
-								<argument>${env.DOCKER_USER}</argument>
-								<argument>-p</argument>
-								<argument>${env.DOCKER_PASSWORD}</argument>
-							</arguments>
-						</configuration>
-					</execution>
-					<!-- Push the image to a docker repo. -->
-					<execution>
-						<id>docker-push</id>
-						<phase>deploy</phase>
-						<goals>
-							<goal>exec</goal>
-						</goals>
-						<configuration>
-							<executable>docker</executable>
-							<workingDirectory>${project.basedir}</workingDirectory>
-							<arguments>
-								<argument>push</argument>
-								<argument>${docker-group-id}/${project.artifactId}:${project.version}</argument>
-							</arguments>
-						</configuration>
-					</execution>
-				</executions>
 			</plugin>
 		</plugins>
 	</build>

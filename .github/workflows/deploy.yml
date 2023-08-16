@@ -1,0 +1,81 @@
+name: Package deploy
+
+on:
+  push:
+    tags:
+      - '*'
+
+env:
+  CODEARTIFACT_REPO_URL: ${{ secrets.CODEARTIFACT_REPO_URL }}
+  CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
+  CODEARTIFACT_DOMAIN_OWNER: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  ECR_REPO: zurohq-${{ secrets.DOCKER_IMAGE_NAME }}
+  DEV_BACKBONE_HOST: ${{ secrets.DEV_BACKBONE_HOST }}
+
+jobs:
+  deploy:
+    name: Deploy package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Run git checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Acquire AWS CodeArtifact token
+        id: token
+        run: |
+          CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain $CODEARTIFACT_DOMAIN --domain-owner $CODEARTIFACT_DOMAIN_OWNER --query authorizationToken --output text)
+          echo "::set-output name=token::$CODEARTIFACT_AUTH_TOKEN"
+
+      - name: Configure Java
+        uses: actions/setup-java@v2
+        with:
+          java-version: '8'
+          distribution: 'adopt'
+          server-id: codeartifact
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_TOKEN
+
+      - name: Configure Docker ECR authentication
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+      - name: Deploy Package
+        run: |
+          mvn versions:use-latest-versions
+          mvn package
+        env:
+          MAVEN_USERNAME: aws
+          MAVEN_TOKEN: ${{ steps.token.outputs.token }}
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO:${GITHUB_REF#refs/*/} .
+          docker tag $ECR_REGISTRY/$ECR_REPO:${GITHUB_REF#refs/*/} $ECR_REGISTRY/$ECR_REPO:dev
+          docker push $ECR_REGISTRY/$ECR_REPO:${GITHUB_REF#refs/*/}
+          docker push $ECR_REGISTRY/$ECR_REPO:dev
+
+  compose:
+    name: Update docker-compose service with new Docker image
+    runs-on: ubuntu-latest
+
+    needs:
+      - deploy
+
+    steps:
+      - name: Connect to the EC2 instance
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ec2-user
+          key: ${{ secrets.KEY }}
+          envs: DEV_BACKBONE_HOST
+          script: |
+            ssh -i zurodev.pem ec2-user@$DEV_BACKBONE_HOST 'bash -s' < deploy.sh ${{ secrets.DOCKER_IMAGE_NAME }} dev
