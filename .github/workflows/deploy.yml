@@ -49,7 +49,6 @@ jobs:
 
       - name: Deploy Package
         run: |
-          mvn versions:use-latest-versions
           mvn package
         env:
           MAVEN_USERNAME: aws

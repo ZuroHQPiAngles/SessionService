@@ -30,13 +30,13 @@
 		<dependency>
 			<groupId>org.piangles.core</groupId>
 			<artifactId>Core</artifactId>
-			<version>RELEASE</version>
+			<version>5.5</version>
 		</dependency>
 
 		<dependency>
 			<groupId>org.piangles.backbone.services</groupId>
 			<artifactId>BackboneServicesLocator</artifactId>
-			<version>RELEASE</version>
+			<version>5.8</version>
 		</dependency>
 
 		<dependency>
