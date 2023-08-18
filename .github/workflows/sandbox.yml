@@ -1,0 +1,60 @@
+name: Sandbox Image creation
+
+on:
+  workflow_dispatch:
+
+env:
+  CODEARTIFACT_REPO_URL: ${{ secrets.CODEARTIFACT_REPO_URL }}
+  CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
+  CODEARTIFACT_DOMAIN_OWNER: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REPO: zurohq-${{ secrets.DOCKER_IMAGE_NAME }}
+  ECR_SANDBOX_REGISTRY: ${{ secrets.ECR_SANDBOX_REGISTRY }}
+
+jobs:
+  build:
+    name: Maven package test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Run git checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Acquire AWS CodeArtifact token
+        id: token
+        run: |
+          CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain $CODEARTIFACT_DOMAIN --domain-owner $CODEARTIFACT_DOMAIN_OWNER --query authorizationToken --output text)
+          echo "::set-output name=token::$CODEARTIFACT_AUTH_TOKEN"
+
+      - name: Configure Java
+        uses: actions/setup-java@v2
+        with:
+          java-version: '8'
+          distribution: 'adopt'
+          server-id: codeartifact
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_TOKEN
+
+      - name: Build Package
+        run: |
+          mvn versions:use-latest-versions
+          mvn package
+        env:
+          MAVEN_USERNAME: aws
+          MAVEN_TOKEN: ${{ steps.token.outputs.token }} 
+
+      - name: Configure ECR authentication
+        run: aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin $ECR_SANDBOX_REGISTRY
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t $ECR_SANDBOX_REGISTRY/$ECR_REPO:${GITHUB_REF#refs/*/} .
+          docker tag $ECR_SANDBOX_REGISTRY/$ECR_REPO:${GITHUB_REF#refs/*/} $ECR_SANDBOX_REGISTRY/$ECR_REPO:sandbox
+          docker push $ECR_SANDBOX_REGISTRY/$ECR_REPO:${GITHUB_REF#refs/*/}
+          docker push $ECR_SANDBOX_REGISTRY/$ECR_REPO:sandbox
