@@ -19,7 +19,7 @@
 		<java-target-version>1.8</java-target-version>
 		<docker-group-id>pianglesorg</docker-group-id>
 				        <!-- Sonar Properties -->
-        <sonar.organization>zurohq</sonar.organization>
+        <sonar.organization>zurohqpiangles</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>		
         <!-- JaCoCo Properties -->
         <jacoco.version>0.8.8</jacoco.version>
