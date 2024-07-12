@@ -40,13 +40,13 @@
 		<dependency>
 			<groupId>org.piangles.core</groupId>
 			<artifactId>Core</artifactId>
-			<version>RELEASE</version>
+			<version>20.3</version>
 		</dependency>
 
 		<dependency>
 			<groupId>org.piangles.backbone.services</groupId>
 			<artifactId>BackboneServicesLocator</artifactId>
-			<version>RELEASE</version>
+			<version>20.1</version>
 		</dependency>
 
 		<dependency>
