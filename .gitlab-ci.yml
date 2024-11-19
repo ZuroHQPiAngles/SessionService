@@ -1,0 +1,103 @@
+include:
+  - project: sre/gitlab-templates
+    ref: v4.6
+    file:
+      - templates/build/docker/build/build.yml
+      - pipelines/common/workflows/trunk.yml
+      - pipelines/common/security/sast.yml
+
+stages:
+  - test:static
+  - quality
+  - build_deploy
+
+variables:
+  CODEARTIFACT_REPO_URL: $CODEARTIFACT_REPO_URL
+  CODEARTIFACT_DOMAIN: $CODEARTIFACT_DOMAIN
+  CODEARTIFACT_DOMAIN_OWNER: $AWS_ACCOUNT_ID
+  ECR_REGISTRY: $ECR_REGISTRY
+  ECR_REPO: zurohq-${DOCKER_IMAGE_NAME}
+  SERVICE_HOST: $SERVICE_HOST
+  AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+  AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+  MAVEN_CLI_OPTS_DEV: "-s settings.xml --batch-mode"
+  DOCKER_DRIVER: overlay2
+  HOST_KEY_SECRET: $HOST_PEM_SECRET
+  DEV_PLATFORM_HOST: $DEV_PLATFORM_HOST
+  DEV_BASTION_HOST: $DEV_BASTION_HOST
+  DEV_INTEGRATION_HOST: $DEV_INTEGRATION_HOST
+  DEV_BACKBONE_HOST: $DEV_BACKBONE_HOST
+  DEV_GATEWAY_HOST: $DEV_GATEWAY_HOST
+  DEV_INTUITION_HOST: $DEV_INTUITION_HOST
+
+quality:sonar:
+  stage: quality
+  tags:
+    - aws
+    - prd
+  rules:
+    - when: on_success
+  image:
+    name: ${CI_DEPENDENCY_PROXY_SERVER}/sre-public/dependency_proxy/containers/sonarsource/sonar-scanner-cli:5.0.1
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+    SONAR_LOGIN: $SONAR_TOKEN
+    SONAR_HOST_URL: $SONAR_URL
+    SONAR_GATE: "true"
+  cache:
+    key: $CI_JOB_NAME
+    paths:
+      - .sonar/cache
+  script:
+    - sonar-scanner -Dsonar.qualitygate.wait=$SONAR_GATE -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG -Dsonar.gitlab.ref_name=$CI_COMMIT_REF_NAME  -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA
+
+deploy:
+  stage: build_deploy
+  tags:
+    - aws
+  image: docker.platform.avalara.io/hopscotch/pipelines/hopsoctch-runner/hopscotch-image:latest
+  before_script:
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID --profile dev
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY --profile dev
+    - aws configure set region $AWS_DEFAULT_REGION --profile dev
+    - service docker start
+
+  script:
+    # Acquire AWS CodeArtifact token
+    - export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain zurohq --domain-owner 536294296987 --query authorizationToken --output text --profile dev)
+    - export CODEARTIFACT_REPO_URL="https://zurohq-536294296987.d.codeartifact.us-east-1.amazonaws.com/maven/main/"
+
+    # Log into CodeArtifact for Maven
+    #- aws codeartifact login --tool maven --repository $CODEARTIFACT_REPOSITORY --domain $CODEARTIFACT_DOMAIN --domain-owner $CODEARTIFACT_DOMAIN_OWNER
+
+    # Configure Maven with CodeArtifact
+    - CURRENT_PWD=$(pwd)
+    - mvn versions:use-latest-versions $MAVEN_CLI_OPTS_DEV
+    - mvn $MAVEN_CLI_OPTS_DEV package
+
+    # Docker ECR authentication
+    - export ECR_REGISTRY=536294296987.dkr.ecr.us-east-1.amazonaws.com
+    - env
+    - aws ecr get-login-password --profile dev | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+    # Build and push Docker image
+    - docker build -t $ECR_REGISTRY/$ECR_REPO:${CI_COMMIT_REF_NAME} .
+    - docker tag $ECR_REGISTRY/$ECR_REPO:${CI_COMMIT_REF_NAME} $ECR_REGISTRY/$ECR_REPO:dev
+    - docker push $ECR_REGISTRY/$ECR_REPO:${CI_COMMIT_REF_NAME}
+    - docker push $ECR_REGISTRY/$ECR_REPO:dev
+
+    #Login on Bastion to pull and start the service
+    #- apt-get update -y
+    #- apt-get install -y openssh-client
+    - mkdir -p ~/.ssh
+    - echo "$HOST_KEY_SECRET" | tr -d '\r' > ~/.ssh/id_rsa.pem
+    - chmod 600 ~/.ssh/id_rsa.pem
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+
+    # pull the image on box
+    - ssh -i ~/.ssh/id_rsa.pem -T ec2-user@${DEV_BASTION_HOST} "ssh -i zurodev.pem ec2-user@${DEV_BACKBONE_HOST} 'bash -s' < deploy.sh \ sessionservice dev"
+  services:
+    - name: docker.platform.avalara.io/sre/gitlab-templates/docker-dind:latest
+      alias: docker
