@@ -140,7 +140,9 @@
 				<version>2.7</version>
 				<configuration>
 					<excludes>
+						<exclude>org.apache.commons</exclude>
 						<exclude>redis.clients</exclude>
+						<exclude>junit</exclude>
 					</excludes>
 				</configuration>
 			</plugin>
