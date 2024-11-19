@@ -127,10 +127,24 @@
 					</execution>
 				</executions>
 			</plugin>
+
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>exec-maven-plugin</artifactId>
 				<version>${exec-maven-plugin-version}</version>
+			</plugin>
+
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>versions-maven-plugin</artifactId>
+				<version>2.7</version>
+				<configuration>
+					<excludes>
+						<exclude>org.apache.commons</exclude>
+						<exclude>redis.clients</exclude>
+						<exclude>junit</exclude>
+					</excludes>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
