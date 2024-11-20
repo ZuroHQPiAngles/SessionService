@@ -45,7 +45,7 @@ public interface SessionManagementDAO
 	
 	public void updateAuthenticationState(String userId, String sessionId, String authenticationState) throws DAOException;
 	
-	public int getExistingValidSessionCount(String userId) throws DAOException;
+	public int getExistingValidSessionCount(String userId, String bizId) throws DAOException;
 
 	String getBizId(String userId) throws DAOException;
 

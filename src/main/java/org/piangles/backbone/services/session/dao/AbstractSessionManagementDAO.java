@@ -50,7 +50,7 @@ public abstract class AbstractSessionManagementDAO implements SessionManagementD
 	}
 
 	@Override
-	public final int getExistingValidSessionCount(String userId) throws DAOException
+	public final int getExistingValidSessionCount(String userId, String bizId) throws DAOException
 	{
 		int existingSessionCount = 0;
 		
@@ -62,7 +62,7 @@ public abstract class AbstractSessionManagementDAO implements SessionManagementD
 		{
 			 for (String sessionId : allUserSessionIds)
 			 {
-				 SessionDetails sessionDetails = getSessionDetailsIfValidById(userId, sessionId);
+				 SessionDetails sessionDetails = getSessionDetailsIfValidById(userId, sessionId, bizId);
 				 if (sessionDetails != null && POST_AUTHENTICATION_STATE.equals(sessionDetails.getAuthenticationState()))
 				 {
 					 existingSessionCount++;

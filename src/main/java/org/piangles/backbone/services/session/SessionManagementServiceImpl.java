@@ -198,7 +198,8 @@ public class SessionManagementServiceImpl implements SessionManagementService
 
 		try
 		{
-			int existingValidSessionCount = sessionManagementDAO.getExistingValidSessionCount(userId);
+			final String bizId = new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(userId);
+			int existingValidSessionCount = sessionManagementDAO.getExistingValidSessionCount(userId, bizId);
 			if (!allowMultipleSessionsPerUser && existingValidSessionCount > 1)
 			{
 				throw new SessionManagementException("User " + userId + " already has an active session.");
@@ -209,7 +210,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			}
 
 			String sessionId = UUID.randomUUID().toString();
-			final String bizId = new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(userId);
+
 			sessionDetails = new SessionDetails(userId, bizId, sessionId, "PostAuthentication", sessionTimeout);
 
 			logger.info("Registered Session for UserId:" + userId + " SessionId:"+sessionId);
