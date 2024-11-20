@@ -1,6 +1,5 @@
 package org.piangles.backbone.services.session.dao;
 
-import org.piangles.backbone.services.config.DefaultConfigProvider;
 import org.piangles.backbone.services.session.SessionManagementService;
 import org.piangles.core.dao.DAOException;
 import org.piangles.core.resources.RDBMSDataStore;
@@ -14,12 +13,11 @@ import java.sql.SQLException;
 
 public class RdbmsDAOImpl implements RdbmsDAO {
 
-    private static final String RDBMS_COMPONENT_ID = "f54fcb6f-0ae6-4709-8d56-a3fcf5556d97";
     private RDBMSDataStore rdbmsDataStore;
 
     public RdbmsDAOImpl() throws ResourceException {
         rdbmsDataStore = ResourceManager.getInstance().getRDBMSDataStore(
-                new CentralConfigProvider(SessionManagementService.NAME, RDBMS_COMPONENT_ID)
+                new CentralConfigProvider(SessionManagementService.NAME, SessionManagementService.NAME)
         );
     }
 
