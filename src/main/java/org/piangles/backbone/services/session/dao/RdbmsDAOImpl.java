@@ -14,11 +14,12 @@ import java.sql.SQLException;
 public class RdbmsDAOImpl implements RdbmsDAO {
 
     private static final String COMPONENT_ID = "PostgresSessionManagementService";
+    private static final String COMPONENT_NAME = "SessionManagementDAO";
     private RDBMSDataStore rdbmsDataStore;
 
     public RdbmsDAOImpl() throws ResourceException {
         rdbmsDataStore = ResourceManager.getInstance().getRDBMSDataStore(
-                new CentralConfigProvider(SessionManagementService.NAME, COMPONENT_ID)
+                new CentralConfigProvider(COMPONENT_ID, COMPONENT_NAME)
         );
     }
 
