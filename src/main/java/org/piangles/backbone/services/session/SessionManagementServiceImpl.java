@@ -199,6 +199,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 		try
 		{
 			final String bizId = new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(userId);
+			logger.info("SessionService::Register  fetched bizId: " + bizId + " for userId: " + userId);
 			int existingValidSessionCount = sessionManagementDAO.getExistingValidSessionCount(userId, bizId);
 			if (!allowMultipleSessionsPerUser && existingValidSessionCount > 1)
 			{
@@ -274,6 +275,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			else
 			{
 				final String bizId = new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(userId);
+				logger.info("SessionService::IsValid  fetched bizId: " + bizId + " for userId: " + userId);
 				valid = sessionManagementDAO.isValid(userId, sessionId, bizId);
 			}
 		}
