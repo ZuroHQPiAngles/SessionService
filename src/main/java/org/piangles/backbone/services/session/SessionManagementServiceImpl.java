@@ -27,9 +27,7 @@ import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
 import org.piangles.backbone.services.Locator;
 import org.piangles.backbone.services.logging.LoggingService;
-import org.piangles.backbone.services.session.dao.DistributedCacheDAOImpl;
-import org.piangles.backbone.services.session.dao.InMemoryDAOImpl;
-import org.piangles.backbone.services.session.dao.SessionManagementDAO;
+import org.piangles.backbone.services.session.dao.*;
 import org.piangles.core.dao.DAOException;
 import org.piangles.core.expt.ValidationException;
 import org.piangles.core.util.central.CentralClient;
@@ -71,6 +69,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 	
 	private HashMap<String, String> predeterminedSessionIdMap = null;
 	private SessionManagementDAO sessionManagementDAO;
+	private RdbmsDAO rdbmsDAO;
 	
 	private long sessionTimeout = 0L;
 	private boolean allowMultipleSessionsPerUser = false;
@@ -79,6 +78,8 @@ public class SessionManagementServiceImpl implements SessionManagementService
 
 	public SessionManagementServiceImpl() throws Exception
 	{
+
+		rdbmsDAO = new RdbmsDAOImpl();
 		predeterminedSessionIdMap = new HashMap<String, String>();
 
 		/**
@@ -208,7 +209,8 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			}
 
 			String sessionId = UUID.randomUUID().toString();
-			sessionDetails = new SessionDetails(userId, sessionId, "PostAuthentication", sessionTimeout);
+			final String bizId = new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(userId);
+			sessionDetails = new SessionDetails(userId, bizId, sessionId, "PostAuthentication", sessionTimeout);
 
 			logger.info("Registered Session for UserId:" + userId + " SessionId:"+sessionId);
 
@@ -270,7 +272,8 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			}
 			else
 			{
-				valid = sessionManagementDAO.isValid(userId, sessionId);
+				final String bizId = new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(userId);
+				valid = sessionManagementDAO.isValid(userId, sessionId, bizId);
 			}
 		}
 		catch (DAOException e)
@@ -408,5 +411,20 @@ public class SessionManagementServiceImpl implements SessionManagementService
 		{
 			logger.info("No SessionDetails found for UserId:" + userId + ". Skipping unregister");
 		}
+	}
+
+	@Override
+	public String getBizIdFromUserId(String userId) throws SessionManagementException {
+		try
+		{
+			return new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(userId);
+		}
+		catch (DAOException e)
+		{
+			String msg = "Error while trying to fetch bizId from userId: " + userId + ". Reason: " + e.getMessage();
+			logger.error(msg, e);
+			throw new SessionManagementException(msg);
+		}
+
 	}
 }

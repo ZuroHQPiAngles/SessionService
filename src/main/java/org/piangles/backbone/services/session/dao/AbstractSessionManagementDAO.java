@@ -37,10 +37,10 @@ public abstract class AbstractSessionManagementDAO implements SessionManagementD
 	}
 	
 	@Override
-	public final boolean isValid(String userId, String sessionId) throws DAOException
+	public final boolean isValid(String userId, String sessionId, String bizId) throws DAOException
 	{
 		boolean valid = false;
-		SessionDetails sessionDetails = getSessionDetailsIfValidById(userId, sessionId);
+		SessionDetails sessionDetails = getSessionDetailsIfValidById(userId, sessionId, bizId);
 		if (sessionDetails != null)
 		{
 			valid = true;
@@ -73,10 +73,10 @@ public abstract class AbstractSessionManagementDAO implements SessionManagementD
 		return existingSessionCount;
 	}
 	
-	protected final SessionDetails getSessionDetailsIfValidById(String userId, String sessionId) throws DAOException
+	protected final SessionDetails getSessionDetailsIfValidById(String userId, String sessionId, String bizId) throws DAOException
 	{
 		SessionDetails sessionDetails = getSessionDetails(userId, sessionId);
-		if (sessionDetails != null && sessionDetails.getUserId().equals(userId))
+		if (sessionDetails != null && sessionDetails.getUserId().equals(userId) && sessionDetails.getBizId().equals(bizId))
 		{
 			if (!isSessionValid(sessionDetails.getLastAccessedTS()))
 			{
