@@ -26,7 +26,7 @@ public class RdbmsDAOImpl implements RdbmsDAO {
     @Override
     public String getBizIdFromUserId(String userId) throws DAOException {
 
-        try(PreparedStatement stmt = rdbmsDataStore.getConnection().prepareCall("{call biz.get_business_profiles(?, ?}"))
+        try(PreparedStatement stmt = rdbmsDataStore.getConnection().prepareCall("{call biz.get_business_profiles(?, ?)}"))
         {
             stmt.setString(1, userId);
             stmt.setString(2, null);
