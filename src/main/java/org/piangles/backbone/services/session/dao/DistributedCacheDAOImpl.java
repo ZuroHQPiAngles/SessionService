@@ -42,7 +42,8 @@ public final class DistributedCacheDAOImpl extends AbstractSessionManagementDAO
 	private static final String AUTHENTICATION_STATE = "authenticationState";
 	private static final String CREATED_TS = "CreatedTS";
 	private static final String LAST_ACCESSED_TS = "LastAccessedTS";
-	
+	private static final String BIZ_ID = "BizId";
+
 	/**
 	 * The reason we are using Redis Lists and Map for saving Session related information
 	 * is : SesssionManagementService allows for a user to have multiple sessions. So given
@@ -149,6 +150,30 @@ public final class DistributedCacheDAOImpl extends AbstractSessionManagementDAO
 	}
 
 	@Override
+	public String getBizId(String userId) throws DAOException {
+        try
+		{
+            return redisCache.execute((jedis)-> jedis.get(userId));
+        }
+		catch (ResourceException e)
+		{
+            throw new DAOException(e);
+        }
+    }
+
+	@Override
+	public void putUserIdBizId(String userId, String bizId) throws DAOException {
+		try
+		{
+			redisCache.execute((jedis)-> jedis.set(userId, bizId));
+		}
+		catch (ResourceException e)
+		{
+			throw new DAOException(e);
+		}
+	}
+
+	@Override
 	protected List<String> getAllUserSessionIds(String userId) throws DAOException
 	{
 		List<String> sessionIds;
@@ -247,6 +272,7 @@ public final class DistributedCacheDAOImpl extends AbstractSessionManagementDAO
 		map.put(AUTHENTICATION_STATE, sessionDetails.getAuthenticationState());
 		map.put(CREATED_TS, "" + sessionDetails.getCreatedTS());
 		map.put(LAST_ACCESSED_TS, "" + sessionDetails.getLastAccessedTS());
+		map.put(BIZ_ID, sessionDetails.getBizId());
 		
 		return map;
 	}
@@ -261,8 +287,9 @@ public final class DistributedCacheDAOImpl extends AbstractSessionManagementDAO
 			String authenticationState = map.get(AUTHENTICATION_STATE);
 			long createdTS = Long.parseLong(map.get(CREATED_TS));
 			long lastAccessedTS = Long.parseLong(map.get(LAST_ACCESSED_TS));
+			String bizId = map.get(BIZ_ID);
 			
-			sessionDetails = new SessionDetails(userId, sessionId, authenticationState, getSessionTimeout(), createdTS, lastAccessedTS);
+			sessionDetails = new SessionDetails(userId, bizId, sessionId, authenticationState, getSessionTimeout(), createdTS, lastAccessedTS);
 		}
 		return sessionDetails;
 	}

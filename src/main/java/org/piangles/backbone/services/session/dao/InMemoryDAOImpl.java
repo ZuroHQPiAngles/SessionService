@@ -76,7 +76,7 @@ public final class InMemoryDAOImpl extends AbstractSessionManagementDAO
 	@Override
 	public synchronized void updateLastAccessed(String userId, String sessionId) throws DAOException
 	{
-		SessionDetails sessionDetails = getSessionDetailsIfValidById(userId, sessionId);
+		SessionDetails sessionDetails = getSessionDetailsIfValidById(userId, sessionId, null);
 		if (sessionDetails != null)
 		{
 			sessionDetails.touch();
@@ -86,15 +86,25 @@ public final class InMemoryDAOImpl extends AbstractSessionManagementDAO
 	@Override
 	public void updateAuthenticationState(String userId, String sessionId, String authenticationState) throws DAOException
 	{
-		SessionDetails sessionDetails = getSessionDetailsIfValidById(userId, sessionId);
+		SessionDetails sessionDetails = getSessionDetailsIfValidById(userId, sessionId, null);
 		if (sessionDetails != null)
 		{
-			SessionDetails newSessionDetails = new SessionDetails(userId, sessionId, 
+			SessionDetails newSessionDetails = new SessionDetails(userId, null, sessionId,
 																	authenticationState, 
 																	sessionDetails.getInactivityExpiryTimeInSeconds(), 
 																	sessionDetails.getCreatedTS(), sessionDetails.getLastAccessedTS());
 			sessionIdMap.put(sessionDetails.getSessionId(), newSessionDetails);
 		}
+	}
+
+	@Override
+	public String getBizId(String userId) throws DAOException {
+		return null;
+	}
+
+	@Override
+	public void putUserIdBizId(String userId, String bizId) throws DAOException {
+
 	}
 
 	@Override

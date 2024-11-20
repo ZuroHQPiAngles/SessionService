@@ -38,12 +38,16 @@ public interface SessionManagementDAO
 	public void markForRemoveSessionDetails(String userId, String sessionId) throws DAOException;
 	
 	//Returns true if session exists else false and if it exists will update the lastAccessedTS
-	public boolean isValid(String userId, String sessionId) throws DAOException;
+	public boolean isValid(String userId, String sessionId, String bizId) throws DAOException;
 	
 	//Touch lastAccessed if session is valid
 	public void updateLastAccessed(String userId, String sessionId) throws DAOException;
 	
 	public void updateAuthenticationState(String userId, String sessionId, String authenticationState) throws DAOException;
 	
-	public int getExistingValidSessionCount(String userId) throws DAOException;
+	public int getExistingValidSessionCount(String userId, String bizId) throws DAOException;
+
+	String getBizId(String userId) throws DAOException;
+
+	void putUserIdBizId(String userId, String bizId) throws DAOException;
 }
