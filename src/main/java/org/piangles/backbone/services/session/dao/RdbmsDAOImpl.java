@@ -6,6 +6,7 @@ import org.piangles.core.dao.DAOException;
 import org.piangles.core.resources.RDBMSDataStore;
 import org.piangles.core.resources.ResourceException;
 import org.piangles.core.resources.ResourceManager;
+import org.piangles.core.util.central.CentralConfigProvider;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -18,7 +19,7 @@ public class RdbmsDAOImpl implements RdbmsDAO {
 
     public RdbmsDAOImpl() throws ResourceException {
         rdbmsDataStore = ResourceManager.getInstance().getRDBMSDataStore(
-                new DefaultConfigProvider(SessionManagementService.NAME, RDBMS_COMPONENT_ID)
+                new CentralConfigProvider(SessionManagementService.NAME, RDBMS_COMPONENT_ID)
         );
     }
 
