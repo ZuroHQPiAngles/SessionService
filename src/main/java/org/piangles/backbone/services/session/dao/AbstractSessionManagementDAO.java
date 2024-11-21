@@ -21,6 +21,7 @@ package org.piangles.backbone.services.session.dao;
 
 import java.util.List;
 
+import org.apache.commons.lang3.StringUtils;
 import org.piangles.backbone.services.session.SessionDetails;
 import org.piangles.core.dao.DAOException;
 
@@ -76,9 +77,13 @@ public abstract class AbstractSessionManagementDAO implements SessionManagementD
 	protected final SessionDetails getSessionDetailsIfValidById(String userId, String sessionId, String bizId) throws DAOException
 	{
 		SessionDetails sessionDetails = getSessionDetails(userId, sessionId);
-		if (sessionDetails != null && sessionDetails.getUserId().equals(userId) && sessionDetails.getBizId().equals(bizId))
+		if (sessionDetails != null && sessionDetails.getUserId().equals(userId))
 		{
 			if (!isSessionValid(sessionDetails.getLastAccessedTS()))
+			{
+				sessionDetails = null;
+			}
+			else if (!StringUtils.isEmpty(sessionDetails.getBizId()) && !sessionDetails.getBizId().equals(bizId))
 			{
 				sessionDetails = null;
 			}
