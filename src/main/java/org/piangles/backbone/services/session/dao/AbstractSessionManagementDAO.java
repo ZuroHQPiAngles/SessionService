@@ -77,7 +77,7 @@ public abstract class AbstractSessionManagementDAO implements SessionManagementD
 	protected final SessionDetails getSessionDetailsIfValidById(String userId, String sessionId, String bizId) throws DAOException
 	{
 		SessionDetails sessionDetails = getSessionDetails(userId, sessionId);
-		if (sessionDetails != null && sessionDetails.getUserId().equals(userId) && sessionDetails.getBizId().equals(bizId))
+		if (sessionDetails != null && sessionDetails.getUserId().equals(userId))
 		{
 			if (!isSessionValid(sessionDetails.getLastAccessedTS()))
 			{
