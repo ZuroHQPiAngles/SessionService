@@ -165,7 +165,10 @@ public final class DistributedCacheDAOImpl extends AbstractSessionManagementDAO
 	public void putUserIdBizId(String userId, String bizId) throws DAOException {
 		try
 		{
-			redisCache.execute((jedis)-> jedis.set(userId, bizId));
+			redisCache.execute((jedis)-> {
+				jedis.set(userId, bizId);
+				return null;
+			});
 		}
 		catch (ResourceException e)
 		{
