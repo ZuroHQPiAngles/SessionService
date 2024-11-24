@@ -8,7 +8,11 @@ import org.piangles.core.resources.ResourceException;
 import org.piangles.core.resources.ResourceManager;
 import org.piangles.core.util.central.CentralConfigProvider;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
 
 public class RdbmsDAOImpl implements RdbmsDAO {
 
@@ -28,7 +32,7 @@ public class RdbmsDAOImpl implements RdbmsDAO {
     public String getBizIdFromUserId(String userId) throws DAOException {
 
         try(Connection conn = rdbmsDataStore.getConnection();
-                PreparedStatement stmt = conn.prepareCall("{call biz.get_business_profiles(?, ?)}"))
+            PreparedStatement stmt = conn.prepareCall("{call biz.get_business_profiles(?, ?)}"))
         {
             stmt.setString(1, userId);
             stmt.setNull(2, Types.VARCHAR);
