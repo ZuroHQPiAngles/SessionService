@@ -6,12 +6,38 @@ include:
       - pipelines/common/workflows/trunk.yml
       - pipelines/common/security/sast.yml
 
+default:
+  tags:
+    - aws
+    - prd
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+      when: always
+    - if: $CI_COMMIT_BRANCH =~ /^(fix|feat|feature)/ && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v?[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$/ && $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH =~ /^(fix|feat|feature)/
+    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "trigger"
+
 stages:
   - test:static
+  - build
   - quality
-  - build_deploy
+  - deploy:lower
+  - deploy:sbx
+  - deploy:prd
 
 variables:
+  DEV_ENV: dev
+  QA_ENV: qat
+  SBX_ENV: sbx
+  PRD_ENV: prd
+  SERVICE_NAME: ${DOCKER_IMAGE_NAME}
   CODEARTIFACT_REPO_URL: $CODEARTIFACT_REPO_URL
   CODEARTIFACT_DOMAIN: $CODEARTIFACT_DOMAIN
   CODEARTIFACT_DOMAIN_OWNER: $AWS_ACCOUNT_ID
@@ -23,13 +49,6 @@ variables:
   AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
   MAVEN_CLI_OPTS_DEV: "-s settings.xml --batch-mode"
   DOCKER_DRIVER: overlay2
-  HOST_KEY_SECRET: $HOST_PEM_SECRET
-  DEV_PLATFORM_HOST: $DEV_PLATFORM_HOST
-  DEV_BASTION_HOST: $DEV_BASTION_HOST
-  DEV_INTEGRATION_HOST: $DEV_INTEGRATION_HOST
-  DEV_BACKBONE_HOST: $DEV_BACKBONE_HOST
-  DEV_GATEWAY_HOST: $DEV_GATEWAY_HOST
-  DEV_INTUITION_HOST: $DEV_INTUITION_HOST
 
 quality:sonar:
   stage: quality
@@ -53,20 +72,40 @@ quality:sonar:
   script:
     - sonar-scanner -Dsonar.qualitygate.wait=$SONAR_GATE -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG -Dsonar.gitlab.ref_name=$CI_COMMIT_REF_NAME  -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA
 
-deploy:
-  stage: build_deploy
+.deploy:
   tags:
     - aws
+    - prd
+  image: docker.platform.avalara.io/hopscotch/pipelines/hopsoctch-runner/hopscotch-image:latest
+  script:
+    #Login on Bastion to pull and start the service
+    #- apt-get update -y
+    #- apt-get install -y openssh-client
+    - mkdir -p ~/.ssh
+    - echo "$HOST_PEM_SECRET" | tr -d '\r' > ~/.ssh/id_rsa.pem
+    - chmod 600 ~/.ssh/id_rsa.pem
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+
+    # pull the image on box
+    - ssh -i ~/.ssh/id_rsa.pem -T ec2-user@${BASTION_HOST} "ssh -i zuro${ENVIRONMENT}.pem ec2-user@${BACKBONE_HOST} 'bash -s' < deploy.sh \ ${SERVICE_NAME} ${IMAGE_TAG}"
+  services:
+    - name: docker.platform.avalara.io/sre/gitlab-templates/docker-dind:latest
+      alias: docker
+
+.build:
+  tags:
+    - aws
+    - prd
   image: docker.platform.avalara.io/hopscotch/pipelines/hopsoctch-runner/hopscotch-image:latest
   before_script:
-    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID --profile dev
-    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY --profile dev
-    - aws configure set region $AWS_DEFAULT_REGION --profile dev
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID --profile ${ENVIRONMENT}
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY --profile ${ENVIRONMENT}
+    - aws configure set region $AWS_DEFAULT_REGION --profile ${ENVIRONMENT}
     - service docker start
 
   script:
     # Acquire AWS CodeArtifact token
-    - export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain zurohq --domain-owner 536294296987 --query authorizationToken --output text --profile dev)
+    - export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain zurohq --domain-owner 536294296987 --query authorizationToken --output text --profile ${ENVIRONMENT})
     - export CODEARTIFACT_REPO_URL="https://zurohq-536294296987.d.codeartifact.us-east-1.amazonaws.com/maven/main/"
 
     # Log into CodeArtifact for Maven
@@ -80,24 +119,131 @@ deploy:
     # Docker ECR authentication
     - export ECR_REGISTRY=536294296987.dkr.ecr.us-east-1.amazonaws.com
     - env
-    - aws ecr get-login-password --profile dev | docker login --username AWS --password-stdin $ECR_REGISTRY
+    - aws ecr get-login-password --profile ${ENVIRONMENT} | docker login --username AWS --password-stdin $ECR_REGISTRY
 
     # Build and push Docker image
-    - docker build -t $ECR_REGISTRY/$ECR_REPO:${CI_COMMIT_REF_NAME} .
-    - docker tag $ECR_REGISTRY/$ECR_REPO:${CI_COMMIT_REF_NAME} $ECR_REGISTRY/$ECR_REPO:dev
-    - docker push $ECR_REGISTRY/$ECR_REPO:${CI_COMMIT_REF_NAME}
-    - docker push $ECR_REGISTRY/$ECR_REPO:dev
+    # Add this before the docker build command to create a safe tag name
+    - export SAFE_BRANCH_NAME=$(echo ${CI_COMMIT_REF_NAME} | tr '/' '-')
 
-    #Login on Bastion to pull and start the service
-    #- apt-get update -y
-    #- apt-get install -y openssh-client
-    - mkdir -p ~/.ssh
-    - echo "$HOST_KEY_SECRET" | tr -d '\r' > ~/.ssh/id_rsa.pem
-    - chmod 600 ~/.ssh/id_rsa.pem
-    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    # Then use the safe branch name in your docker commands
+    - docker build -t $ECR_REGISTRY/$ECR_REPO:${SAFE_BRANCH_NAME} .
+    - docker tag $ECR_REGISTRY/$ECR_REPO:${SAFE_BRANCH_NAME} $ECR_REGISTRY/$ECR_REPO:${IMAGE_TAG}
+    - docker push $ECR_REGISTRY/$ECR_REPO:${SAFE_BRANCH_NAME}
+    - docker push $ECR_REGISTRY/$ECR_REPO:${IMAGE_TAG}
 
-    # pull the image on box
-    - ssh -i ~/.ssh/id_rsa.pem -T ec2-user@${DEV_BASTION_HOST} "ssh -i zurodev.pem ec2-user@${DEV_BACKBONE_HOST} 'bash -s' < deploy.sh \ sessionservice dev"
   services:
     - name: docker.platform.avalara.io/sre/gitlab-templates/docker-dind:latest
       alias: docker
+
+build:dev:
+  stage: build
+  extends:
+    - .build
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  variables:
+    ENVIRONMENT: $DEV_ENV
+    IMAGE_TAG: dev
+
+build:qa:
+  stage: build
+  extends:
+    - .build
+  rules:
+    - !reference [".rules:release", rules]
+  variables:
+    ENVIRONMENT: $QA_ENV
+    IMAGE_TAG: qa
+
+build:sbx:
+  stage: build
+  extends:
+    - .build
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /release\/.*/
+  variables:
+    ENVIRONMENT: $SBX_ENV
+    IMAGE_TAG: uat
+
+build:prd:
+  stage: build
+  extends:
+    - .build
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /release\/.*/
+  variables:
+    ENVIRONMENT: $PRD_ENV
+    IMAGE_TAG: prod
+
+deploy:dev:
+  stage: deploy:lower
+  extends:
+    - .deploy
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  variables:
+    ENVIRONMENT: $DEV_ENV
+    PLATFORM_HOST: $DEV_PLATFORM_HOST
+    BASTION_HOST: $DEV_BASTION_HOST
+    INTEGRATION_HOST: $DEV_INTEGRATION_HOST
+    BACKBONE_HOST: $DEV_BACKBONE_HOST
+    GATEWAY_HOST: $DEV_GATEWAY_HOST
+    INTUITION_HOST: $DEV_INTUITION_HOST
+    HOST_PEM_SECRET: $DEV_HOST_PEM_SECRET
+    IMAGE_TAG: dev
+
+deploy:qa:
+  stage: deploy:lower
+  extends:
+    - .deploy
+  rules:
+    - !reference [".rules:release", rules]
+  variables:
+    ENVIRONMENT: $QA_ENV
+    PLATFORM_HOST: $QAT_PLATFORM_HOST
+    BASTION_HOST: $QAT_BASTION_HOST
+    INTEGRATION_HOST: $QAT_INTEGRATION_HOST
+    BACKBONE_HOST: $QAT_BACKBONE_HOST
+    GATEWAY_HOST: $QAT_GATEWAY_HOST
+    INTUITION_HOST: $QAT_INTUITION_HOST
+    HOST_PEM_SECRET: $QA_HOST_PEM_SECRET
+    IMAGE_TAG: qa
+
+deploy:sbx:
+  stage: deploy:sbx
+  extends:
+    - .deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /release\/.*/
+      when: manual
+  variables:
+    ENVIRONMENT: $SBX_ENV
+    PLATFORM_HOST: $SBX_PLATFORM_HOST
+    BASTION_HOST: $SBX_BASTION_HOST
+    INTEGRATION_HOST: $SBX_INTEGRATION_HOST
+    BACKBONE_HOST: $SBX_BACKBONE_HOST
+    GATEWAY_HOST: $SBX_GATEWAY_HOST
+    INTUITION_HOST: $SBX_INTUITION_HOST
+    HOST_PEM_SECRET: $SBX_HOST_PEM_SECRET
+    IMAGE_TAG: uat
+
+deploy:prd:
+  stage: deploy:prd
+  extends:
+    - .deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /release\/.*/
+      when: manual
+  variables:
+    ENVIRONMENT: $PRD_ENV
+    PLATFORM_HOST: $PRD_PLATFORM_HOST
+    BASTION_HOST: $PRD_BASTION_HOST
+    INTEGRATION_HOST: $PRD_INTEGRATION_HOST
+    BACKBONE_HOST: $PRD_BACKBONE_HOST
+    GATEWAY_HOST: $PRD_GATEWAY_HOST
+    INTUITION_HOST: $PRD_INTUITION_HOST
+    HOST_PEM_SECRET: $PRD_HOST_PEM_SECRET
+    IMAGE_TAG: prod
+
