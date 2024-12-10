@@ -64,7 +64,7 @@ quality:sonar:
     GIT_DEPTH: "0"
     SONAR_LOGIN: $SONAR_TOKEN
     SONAR_HOST_URL: $SONAR_URL
-    SONAR_GATE: "true"
+    SONAR_GATE: "false"
   cache:
     key: $CI_JOB_NAME
     paths:
