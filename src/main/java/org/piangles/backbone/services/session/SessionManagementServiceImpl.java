@@ -208,8 +208,10 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			logger.info("Creating jwe token and session for userId: " + externalLinkData.getExternalUserId());
 			final String sessionId = UUID.randomUUID().toString();
 
-			final String jweToken = JWTUtils.generateJwe(externalLinkData.getExternalUserId(), sessionId);
-			final String refreshToken = JWTUtils.generateRefreshToken(externalLinkData.getExternalUserId(), sessionId);
+			final JWTUtils jwtUtils = new JWTUtils();
+
+			final String jweToken = jwtUtils.generateJwe(externalLinkData.getExternalUserId(), sessionId);
+			final String refreshToken = jwtUtils.generateRefreshToken(externalLinkData.getExternalUserId(), sessionId);
 
 			final ExternalUserSessionDetails sessionDetails = new ExternalUserSessionDetails(
 					externalLinkData.getExternalUserId(),
@@ -325,7 +327,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 
 	@Override
 	public String refreshJWEToken(String refreshToken) throws SessionManagementException{
-		return JWTUtils.refreshAccessToken(refreshToken);
+		return new JWTUtils().refreshAccessToken(refreshToken);
 	}
 
 	@Override

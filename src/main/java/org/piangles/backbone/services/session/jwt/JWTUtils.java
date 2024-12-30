@@ -18,7 +18,6 @@ import org.piangles.backbone.services.logging.LoggingService;
 import org.piangles.backbone.services.session.SessionManagementException;
 
 import javax.crypto.spec.SecretKeySpec;
-import java.util.Date;
 
 public class JWTUtils {
 
@@ -30,7 +29,7 @@ public class JWTUtils {
 
     private final LoggingService logger = Locator.getInstance().getLoggingService();
 
-    public static String generateJwe(String userId, String sessionId) throws SessionManagementException {
+    public String generateJwe(String userId, String sessionId) throws SessionManagementException {
         try
         {
             JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
@@ -39,6 +38,8 @@ public class JWTUtils {
                     .claim("exp", System.currentTimeMillis() + ACCESS_TOKEN_EXPIRATION_TIME)
                     .claim("sid", sessionId)
                     .build();
+
+            logger.info("GENERATE JWE:: Created ClaimSet");
 
             SecretKeySpec secretKey = new SecretKeySpec(ENCRYPTION_KEY.getBytes(), "AES");
 
@@ -52,6 +53,7 @@ public class JWTUtils {
         }
         catch (Exception e)
         {
+            logger.error("Error while generating JWT: " + e.getMessage());
             throw new SessionManagementException("Error generating access token", e);
         }
 
@@ -101,7 +103,7 @@ public class JWTUtils {
         }
     }
 
-    public static String refreshAccessToken(String refreshToken) throws SessionManagementException {
+    public String refreshAccessToken(String refreshToken) throws SessionManagementException {
         final Pair<String, String> claims = validateRefreshToken(refreshToken);
         if (StringUtils.isAnyEmpty(claims.getLeft(), claims.getRight())) {
             throw new SessionManagementException("Unable to extract sessionId/UserId from refresh token");
@@ -117,7 +119,7 @@ public class JWTUtils {
         }
     }
 
-    public static String generateRefreshToken(String userId, String sessionId) throws SessionManagementException {
+    public String generateRefreshToken(String userId, String sessionId) throws SessionManagementException {
         try
         {
             JWSSigner signer = new MACSigner(SECRET_KEY.getBytes());
@@ -127,6 +129,8 @@ public class JWTUtils {
                     .claim("iat", System.currentTimeMillis())
                     .claim("exp", System.currentTimeMillis() + REFRESH_TOKEN_EXPIRATION_TIME)
                     .build();
+
+            logger.info("GENERATE RefreshToken:: Created ClaimSet");
 
             SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
             signedJWT.sign(signer);
