@@ -205,6 +205,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 				throw new SessionManagementException("User " + externalLinkData.getExternalUserId() + " has reached maximum active sessions.");
 			}
 
+			logger.info("Creating jwe token and session for userId: " + externalLinkData.getExternalUserId());
 			final String sessionId = UUID.randomUUID().toString();
 
 			final String jweToken = JWTUtils.generateJwe(externalLinkData.getExternalUserId(), sessionId);
