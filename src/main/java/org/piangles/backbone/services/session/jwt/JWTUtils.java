@@ -127,7 +127,10 @@ public class JWTUtils {
     public String generateRefreshToken(String userId, String sessionId) throws SessionManagementException {
         try
         {
-            JWSSigner signer = new MACSigner(SECRET_KEY.getBytes());
+            SecureRandom secureRandom = new SecureRandom();
+            byte[] kek = new byte[32];
+            secureRandom.nextBytes(kek);
+            JWSSigner signer = new MACSigner(kek);
             JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
                     .subject(userId)
                     .claim("sid", sessionId)
