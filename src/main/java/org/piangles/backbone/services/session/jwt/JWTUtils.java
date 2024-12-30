@@ -48,7 +48,7 @@ public class JWTUtils {
 
             SecretKeySpec secretKey = new SecretKeySpec(kek, "AES");
 
-            JWEHeader header = new JWEHeader(JWEAlgorithm.RSA_OAEP_256, EncryptionMethod.A256GCM);
+            JWEHeader header = new JWEHeader(JWEAlgorithm.A256GCMKW, EncryptionMethod.A256GCM);
 
             EncryptedJWT encryptedJWT = new EncryptedJWT(header, claimsSet);
 
