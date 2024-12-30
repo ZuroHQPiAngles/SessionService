@@ -18,6 +18,7 @@ import org.piangles.backbone.services.logging.LoggingService;
 import org.piangles.backbone.services.session.SessionManagementException;
 
 import javax.crypto.spec.SecretKeySpec;
+import java.security.SecureRandom;
 
 public class JWTUtils {
 
@@ -41,9 +42,13 @@ public class JWTUtils {
 
             logger.info("GENERATE JWE:: Created ClaimSet");
 
-            SecretKeySpec secretKey = new SecretKeySpec(ENCRYPTION_KEY.getBytes(), "AES");
+            SecureRandom secureRandom = new SecureRandom();
+            byte[] kek = new byte[32];
+            secureRandom.nextBytes(kek);
 
-            JWEHeader header = new JWEHeader(JWEAlgorithm.DIR, EncryptionMethod.A128CBC_HS256);
+            SecretKeySpec secretKey = new SecretKeySpec(kek, "AES");
+
+            JWEHeader header = new JWEHeader(JWEAlgorithm.RSA_OAEP_256, EncryptionMethod.A128GCM);
 
             EncryptedJWT encryptedJWT = new EncryptedJWT(header, claimsSet);
 
@@ -139,6 +144,7 @@ public class JWTUtils {
         }
         catch (Exception e)
         {
+            logger.error("Error while generating refresh token: " + e.getMessage());
             throw new SessionManagementException("Error generating refresh token", e);
         }
     }

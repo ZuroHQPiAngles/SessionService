@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 
-import com.nimbusds.jwt.JWT;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.piangles.backbone.services.Locator;
@@ -35,7 +34,6 @@ import org.piangles.core.dao.DAOException;
 import org.piangles.core.expt.ValidationException;
 import org.piangles.core.util.central.CentralClient;
 
-import javax.jms.Session;
 
 /**
  * SessionIdProvider will be providing SessionId during RequestCreation.
