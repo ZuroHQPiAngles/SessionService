@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.piangles.backbone.services.session.ExternalUserSessionDetails;
 import org.piangles.backbone.services.session.SessionDetails;
 import org.piangles.core.dao.DAOException;
 
@@ -104,6 +105,11 @@ public final class InMemoryDAOImpl extends AbstractSessionManagementDAO
 
 	@Override
 	public void putUserIdBizId(String userId, String bizId) throws DAOException {
+
+	}
+
+	@Override
+	public void storeExternalSessionDetails(ExternalUserSessionDetails sessionDetails) throws DAOException {
 
 	}
 
