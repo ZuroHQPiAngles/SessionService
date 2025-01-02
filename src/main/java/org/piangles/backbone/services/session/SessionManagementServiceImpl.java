@@ -19,10 +19,8 @@
  
 package org.piangles.backbone.services.session;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Properties;
-import java.util.UUID;
+import java.security.SecureRandom;
+import java.util.*;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Triple;
@@ -77,12 +75,15 @@ public class SessionManagementServiceImpl implements SessionManagementService
 	private long sessionTimeout = 0L;
 	private boolean allowMultipleSessionsPerUser = false;
 	private int maxSessiontCountPerUser = 1;
+
+	private JWTUtils jwtUtils;
 	
 
 	public SessionManagementServiceImpl() throws Exception
 	{
 
 		rdbmsDAO = new RdbmsDAOImpl();
+		jwtUtils = new JWTUtils(generateRandomKey(32));
 		predeterminedSessionIdMap = new HashMap<String, String>();
 
 		/**
@@ -193,6 +194,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 	{
 		try
 		{
+			final String bizId = new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(externalLinkData.getExternalUserId());
 			int existingValidSessionCount = sessionManagementDAO.getExistingValidSessionCount(externalLinkData.getExternalUserId(), externalLinkData.getExternalBizId());
 			if (!allowMultipleSessionsPerUser && existingValidSessionCount > 1)
 			{
@@ -206,14 +208,12 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			logger.info("Creating jwe token and session for userId: " + externalLinkData.getExternalUserId());
 			final String sessionId = UUID.randomUUID().toString();
 
-			final JWTUtils jwtUtils = new JWTUtils();
-
-			final String jweToken = jwtUtils.generateJwe(externalLinkData.getExternalUserId(), sessionId);
+			final String jweToken = jwtUtils.generateAccessToken(externalLinkData.getExternalUserId(), sessionId);
 			final String refreshToken = jwtUtils.generateRefreshToken(externalLinkData.getExternalUserId(), sessionId);
 
 			final ExternalUserSessionDetails sessionDetails = new ExternalUserSessionDetails(
 					externalLinkData.getExternalUserId(),
-					externalLinkData.getExternalBizId(),
+					bizId,
 					externalLinkData.getPayeeBizId(),
 					externalLinkData.getExternalUserEmailId(),
 					externalLinkData.getUuid(),
@@ -312,20 +312,21 @@ public class SessionManagementServiceImpl implements SessionManagementService
 	@Override
 	public boolean isValidJWE(String accessToken) throws SessionManagementException
 	{
-		final Triple<String, String, Boolean> jweAuthResult = new JWTUtils().authenticateJwe(accessToken);
+		//jwt validation
+		final Triple<String, String, Boolean> jweAuthResult = jwtUtils.authenticateAccessToken(accessToken);
 
 		if (!jweAuthResult.getRight())
 		{
 			return false;
 		}
 
+		//userId, sessionId validation
 		return isValid(jweAuthResult.getLeft(), jweAuthResult.getMiddle());
-
 	}
 
 	@Override
 	public String refreshJWEToken(String refreshToken) throws SessionManagementException{
-		return new JWTUtils().refreshAccessToken(refreshToken);
+		return jwtUtils.refreshAccessToken(refreshToken);
 	}
 
 	@Override
@@ -359,8 +360,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			logger.error(message + ". Reason: " + e.getMessage(), e);
 			throw new SessionManagementException(message);
 		}
-		//System.out.println("Validating Session for UserId:" + userId + " SessionId:"+sessionId + " Validation result: " + valid);
-		
+
 		return valid;
 	}
 
@@ -503,5 +503,17 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			throw new SessionManagementException(msg);
 		}
 
+	}
+
+	//Need to move this to config
+	private String generateRandomKey(int size) {
+
+		SecureRandom secureRandom = new SecureRandom();
+
+		byte[] key = new byte[size];
+
+		secureRandom.nextBytes(key);
+
+		return Base64.getEncoder().encodeToString(key);
 	}
 }

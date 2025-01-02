@@ -2,174 +2,131 @@ package org.piangles.backbone.services.session.jwt;
 
 
 import com.nimbusds.jose.*;
-import com.nimbusds.jose.crypto.AESDecrypter;
-import com.nimbusds.jose.crypto.AESEncrypter;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
-import com.nimbusds.jwt.EncryptedJWT;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.Triple;
-import org.codehaus.jettison.json.JSONObject;
 import org.piangles.backbone.services.Locator;
 import org.piangles.backbone.services.logging.LoggingService;
 import org.piangles.backbone.services.session.SessionManagementException;
 
-import javax.crypto.spec.SecretKeySpec;
-import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.Date;
 
 public class JWTUtils {
 
-    private static final long ACCESS_TOKEN_EXPIRATION_TIME = 5000; // 5 seconds
-    private static final long REFRESH_TOKEN_EXPIRATION_TIME = 1000 * 60 * 15; // 15 minutes
+    private static final long ACCESS_TOKEN_EXPIRATION_TIME = 5L; // 5 seconds
+    private static final long REFRESH_TOKEN_EXPIRATION_TIME = 15 * 60L; // 15 minutes
 
-    private static final String ENCRYPTION_KEY = "avalara123"; // Symmetric encryption key
-    private static final String SECRET_KEY = "avalara321";  // Key for signing JWT header (used in signing the JWT)
+    private final LoggingService logger;
+    private final String secretKey;
 
-    private final LoggingService logger = Locator.getInstance().getLoggingService();
-
-    public String generateJwe(String userId, String sessionId) throws SessionManagementException {
-        try
-        {
-            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                    .subject(userId)
-                    .claim("iat", System.currentTimeMillis())
-                    .claim("exp", System.currentTimeMillis() + ACCESS_TOKEN_EXPIRATION_TIME)
-                    .claim("sid", sessionId)
-                    .build();
-
-            logger.info("GENERATE JWE:: Created ClaimSet");
-
-            SecureRandom secureRandom = new SecureRandom();
-            byte[] kek = new byte[32];
-            secureRandom.nextBytes(kek);
-
-            SecretKeySpec secretKey = new SecretKeySpec(kek, "AES");
-
-            JWEHeader header = new JWEHeader(JWEAlgorithm.A256GCMKW, EncryptionMethod.A256GCM);
-
-            EncryptedJWT encryptedJWT = new EncryptedJWT(header, claimsSet);
-
-            encryptedJWT.encrypt(new AESEncrypter(secretKey));
-
-            return encryptedJWT.serialize();
-        }
-        catch (Exception e)
-        {
-            logger.error("Error while generating JWT: " + e.getMessage());
-            throw new SessionManagementException("Error generating access token", e);
-        }
-
+    public JWTUtils(String secretKey) {
+        this.secretKey = secretKey;
+        logger = Locator.getInstance().getLoggingService();
     }
 
-    private static String decryptJwe(String jwe) throws SessionManagementException {
-        try
-        {
-            EncryptedJWT encryptedJWT = EncryptedJWT.parse(jwe);
-
-            encryptedJWT.decrypt(new AESDecrypter(new SecretKeySpec(ENCRYPTION_KEY.getBytes(), "AES")));
-
-            return encryptedJWT.getPayload().toString();
-        }
-        catch (Exception e)
-        {
-            throw new SessionManagementException("Error while decrypting jwe token", e);
-        }
-
-    }
-
-    public Triple<String,String, Boolean> authenticateJwe(String jwe) throws SessionManagementException {
+    public String generateAccessToken(String userId, String sessionId) throws SessionManagementException {
         try {
-            String decryptedPayload = decryptJwe(jwe);
-            JSONObject payload = new JSONObject(decryptedPayload);
+            final JWTClaimsSet claims = buildClaims(userId, sessionId, ACCESS_TOKEN_EXPIRATION_TIME);
+            JWSHeader header = new JWSHeader(JWSAlgorithm.HS256);
+            MACSigner signer = new MACSigner(secretKey.getBytes());
+            SignedJWT signedJWT = new SignedJWT(header, claims);
+            signedJWT.sign(signer);
 
-            long expiration = payload.getLong("exp");
-            if (expiration < System.currentTimeMillis()) {
-                logger.info("JWE has expired!");
-                return Triple.of(null, null,false);
-            }
-
-            String userId = payload.getString("sub");
-            String sessionId = payload.getString("sid");
-
-            if(StringUtils.isAnyEmpty(userId, sessionId)) {
-                logger.info("Not found userId or sessionId in JWE!");
-                return Triple.of(null, null,false);
-            }
-
-            logger.info("JWE authenticated for userId: " + userId + ", sessionId: " + sessionId);
-            return Triple.of(userId, sessionId,true);
-        }
-        catch (Exception e)
-        {
-            throw new SessionManagementException("Error while authenticating jwe token", e);
+            return signedJWT.serialize();
+        } catch (Exception e) {
+            final String errMsg = "Error generating access token: " + e.getMessage();
+            logger.error(errMsg, e);
+            throw new SessionManagementException(errMsg);
         }
     }
 
-    public String refreshAccessToken(String refreshToken) throws SessionManagementException {
-        final Pair<String, String> claims = validateRefreshToken(refreshToken);
-        if (StringUtils.isAnyEmpty(claims.getLeft(), claims.getRight())) {
-            throw new SessionManagementException("Unable to extract sessionId/UserId from refresh token");
-        }
+    public Triple<String, String, Boolean> authenticateAccessToken(String accessToken) throws SessionManagementException {
+        try {
+            SignedJWT signedJWT = SignedJWT.parse(accessToken);
 
-        try
-        {
-            return generateJwe(claims.getLeft(), claims.getRight());
-        }
-        catch (Exception e)
-        {
-            throw new SessionManagementException("Unable to refresh access token", e);
+            MACVerifier verifier = new MACVerifier(secretKey.getBytes());
+            if (!signedJWT.verify(verifier)) {
+                logger.error("Invalid access token signature");
+                return Triple.of(null, null, false);
+            }
+
+            final JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
+
+            if (claimsSet.getExpirationTime().getTime() < System.currentTimeMillis())
+            {
+                logger.error("Access token expired.");
+                return Triple.of(null, null, false);
+            }
+            return Triple.of(claimsSet.getSubject(), claimsSet.getClaimAsString("sid"),  true);
+        } catch (Exception e) {
+            final String errMsg = "Error parsing access token: " + e.getMessage();
+            logger.error(errMsg, e);
+            throw new SessionManagementException(errMsg);
         }
     }
 
     public String generateRefreshToken(String userId, String sessionId) throws SessionManagementException {
-        try
-        {
-            SecureRandom secureRandom = new SecureRandom();
-            byte[] kek = new byte[32];
-            secureRandom.nextBytes(kek);
-            JWSSigner signer = new MACSigner(kek);
-            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                    .subject(userId)
-                    .claim("sid", sessionId)
-                    .claim("iat", System.currentTimeMillis())
-                    .claim("exp", System.currentTimeMillis() + REFRESH_TOKEN_EXPIRATION_TIME)
-                    .build();
-
-            logger.info("GENERATE RefreshToken:: Created ClaimSet");
-
-            SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
+        try {
+            final JWTClaimsSet claims = buildClaims(userId, sessionId, REFRESH_TOKEN_EXPIRATION_TIME);
+            JWSHeader header = new JWSHeader(JWSAlgorithm.HS256);
+            MACSigner signer = new MACSigner(secretKey.getBytes());
+            SignedJWT signedJWT = new SignedJWT(header, claims);
             signedJWT.sign(signer);
 
             return signedJWT.serialize();
-        }
-        catch (Exception e)
-        {
-            logger.error("Error while generating refresh token: " + e.getMessage());
-            throw new SessionManagementException("Error generating refresh token", e);
+        } catch (Exception e) {
+            final String errMsg = "Error generating refresh token: " + e.getMessage();
+            logger.error(errMsg, e);
+            throw new SessionManagementException(errMsg);
         }
     }
 
-    private static Pair<String, String> validateRefreshToken(String refreshToken) throws SessionManagementException {
+    public String refreshAccessToken(String refreshToken) throws SessionManagementException {
+        try {
+            JWTClaimsSet claims = parseRefreshToken(refreshToken);
+            String userId = claims.getSubject();
+            String sessionId = claims.getStringClaim("sid");
+            return generateAccessToken(userId, sessionId);
+        } catch (Exception e) {
+            final String errMsg = "Error while refreshing access token: " + e.getMessage();
+            logger.error(errMsg, e);
+            throw new SessionManagementException(errMsg);
+        }
+    }
+
+    private JWTClaimsSet parseRefreshToken(String refreshToken) throws SessionManagementException {
         try {
             SignedJWT signedJWT = SignedJWT.parse(refreshToken);
-
-            JWSVerifier verifier = new MACVerifier(SECRET_KEY.getBytes());
+            MACVerifier verifier = new MACVerifier(secretKey.getBytes());
             if (!signedJWT.verify(verifier)) {
+                logger.error("Invalid refresh token signature");
                 throw new SessionManagementException("Invalid refresh token signature");
             }
 
-            JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
+            final JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
+
             if (claimsSet.getExpirationTime().getTime() < System.currentTimeMillis()) {
-                throw new SessionManagementException("Refresh Token expired");
+                logger.error("Refresh token expired.");
+                throw new SessionManagementException("Refresh token expired.");
             }
 
-            return Pair.of(claimsSet.getSubject(), (String) claimsSet.getClaim("sid"));
+            return signedJWT.getJWTClaimsSet();
+        } catch (Exception e) {
+            final String errMsg = "Error parsing refresh token: " + e.getMessage();
+            logger.error(errMsg, e);
+            throw new SessionManagementException(errMsg);
         }
-        catch (Exception e) {
-            throw new SessionManagementException("Unable to validate refresh token", e);
-        }
+    }
+
+    private JWTClaimsSet buildClaims(String userId, String sessionId, long expirationTime) {
+        return new JWTClaimsSet.Builder()
+                .subject(userId)
+                .claim("sid", sessionId)
+                .issueTime(Date.from(Instant.now()))
+                .expirationTime(Date.from(Instant.now().plusSeconds(expirationTime)))
+                .build();
     }
 }
