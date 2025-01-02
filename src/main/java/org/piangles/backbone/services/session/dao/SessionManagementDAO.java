@@ -21,6 +21,7 @@ package org.piangles.backbone.services.session.dao;
 
 import java.util.List;
 
+import org.piangles.backbone.services.session.ExternalUserSessionDetails;
 import org.piangles.backbone.services.session.SessionDetails;
 import org.piangles.core.dao.DAOException;
 
@@ -50,4 +51,6 @@ public interface SessionManagementDAO
 	String getBizId(String userId) throws DAOException;
 
 	void putUserIdBizId(String userId, String bizId) throws DAOException;
+
+	void storeExternalSessionDetails(ExternalUserSessionDetails sessionDetails) throws DAOException;
 }

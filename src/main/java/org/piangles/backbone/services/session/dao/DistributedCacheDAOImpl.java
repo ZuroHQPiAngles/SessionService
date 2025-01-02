@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.piangles.backbone.services.session.ExternalUserSessionDetails;
 import org.piangles.backbone.services.session.SessionDetails;
 import org.piangles.backbone.services.session.SessionManagementService;
 import org.piangles.core.dao.DAOException;
@@ -43,6 +44,10 @@ public final class DistributedCacheDAOImpl extends AbstractSessionManagementDAO
 	private static final String CREATED_TS = "CreatedTS";
 	private static final String LAST_ACCESSED_TS = "LastAccessedTS";
 	private static final String BIZ_ID = "BizId";
+	private static final String EXTERNAL_LINK_UUID = "ExternalLinkUUID";
+	private static final String REFRESH_TOKEN = "RefreshToken";
+	private static final String INVOICE_ID = "InvoiceId";
+
 
 	/**
 	 * The reason we are using Redis Lists and Map for saving Session related information
@@ -174,6 +179,37 @@ public final class DistributedCacheDAOImpl extends AbstractSessionManagementDAO
 		{
 			throw new DAOException(e);
 		}
+	}
+
+	@Override
+	public void storeExternalSessionDetails(ExternalUserSessionDetails sessionDetails) throws DAOException {
+		try
+		{
+			redisCache.execute((jedis) -> {
+				jedis.lpush(createUser2SessionIdKey(sessionDetails.getExternalUserId()), sessionDetails.getSessionId());
+				jedis.hmset(createUser2SessionDetailsKey(sessionDetails.getExternalUserId(), sessionDetails.getSessionId()), createExternalSessionDetailsMap(sessionDetails));
+				return null;
+			});
+		}
+		catch (ResourceException e)
+		{
+			throw new DAOException(e);
+		}
+	}
+
+	private Map<String, String> createExternalSessionDetailsMap(ExternalUserSessionDetails sessionDetails) {
+		Map<String, String> map = new HashMap<>();
+		map.put(USER_ID, sessionDetails.getExternalUserId());
+		map.put(SESSION_ID, sessionDetails.getSessionId());
+		map.put(AUTHENTICATION_STATE, sessionDetails.getAuthenticationState());
+		map.put(CREATED_TS, "" + sessionDetails.getCreatedTS());
+		map.put(LAST_ACCESSED_TS, "" + sessionDetails.getLastAccessedTS());
+		map.put(BIZ_ID, sessionDetails.getExternalBizId());
+		map.put(INVOICE_ID, sessionDetails.getInvoiceId());
+		map.put(REFRESH_TOKEN, sessionDetails.getRefreshToken());
+		map.put(EXTERNAL_LINK_UUID, sessionDetails.getUuid());
+
+		return map;
 	}
 
 	@Override
