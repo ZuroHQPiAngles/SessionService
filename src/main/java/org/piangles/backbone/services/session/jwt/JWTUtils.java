@@ -129,4 +129,14 @@ public class JWTUtils {
                 .expirationTime(Date.from(Instant.now().plusSeconds(expirationTime)))
                 .build();
     }
+
+    public long getAccessTokenExpirationTime()
+    {
+        return ACCESS_TOKEN_EXPIRATION_TIME * 1000;
+    }
+
+    public long getRefreshTokenExpirationTime()
+    {
+        return REFRESH_TOKEN_EXPIRATION_TIME * 1000;
+    }
 }

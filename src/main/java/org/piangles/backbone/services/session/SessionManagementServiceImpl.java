@@ -223,6 +223,9 @@ public class SessionManagementServiceImpl implements SessionManagementService
 					"PostAuthentication",
 					sessionTimeout);
 
+			sessionDetails.setAccessTokenExpiry(jwtUtils.getAccessTokenExpirationTime());
+			sessionDetails.setRefreshTokenExpiry(jwtUtils.getRefreshTokenExpirationTime());
+
 			logger.info("Registered Session for UUID:" + externalLinkData.getUuid() + " SessionId: " + sessionId);
 
 			sessionManagementDAO.storeExternalSessionDetails(sessionDetails);
