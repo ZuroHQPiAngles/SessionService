@@ -19,18 +19,19 @@
  
 package org.piangles.backbone.services.session;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Properties;
-import java.util.UUID;
+import java.security.SecureRandom;
+import java.util.*;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Triple;
 import org.piangles.backbone.services.Locator;
 import org.piangles.backbone.services.logging.LoggingService;
 import org.piangles.backbone.services.session.dao.*;
+import org.piangles.backbone.services.session.jwt.JWTUtils;
 import org.piangles.core.dao.DAOException;
 import org.piangles.core.expt.ValidationException;
 import org.piangles.core.util.central.CentralClient;
+
 
 /**
  * SessionIdProvider will be providing SessionId during RequestCreation.
@@ -74,12 +75,15 @@ public class SessionManagementServiceImpl implements SessionManagementService
 	private long sessionTimeout = 0L;
 	private boolean allowMultipleSessionsPerUser = false;
 	private int maxSessiontCountPerUser = 1;
+
+	private JWTUtils jwtUtils;
 	
 
 	public SessionManagementServiceImpl() throws Exception
 	{
 
 		rdbmsDAO = new RdbmsDAOImpl();
+		jwtUtils = new JWTUtils(generateRandomKey(32));
 		predeterminedSessionIdMap = new HashMap<String, String>();
 
 		/**
@@ -186,6 +190,60 @@ public class SessionManagementServiceImpl implements SessionManagementService
 	}
 
 	@Override
+	public ExternalUserSessionDetails registerSessionForExternalUser(ExternalLinkData externalLinkData) throws SessionManagementException
+	{
+		try
+		{
+			final String bizId = new GetBizIdForUserId(sessionManagementDAO, rdbmsDAO).apply(externalLinkData.getExternalUserId());
+			int existingValidSessionCount = sessionManagementDAO.getExistingValidSessionCount(externalLinkData.getExternalUserId(), externalLinkData.getExternalBizId());
+			if (!allowMultipleSessionsPerUser && existingValidSessionCount > 1)
+			{
+				throw new SessionManagementException("User " + externalLinkData.getExternalUserId() + " already has an active session.");
+			}
+			else if (allowMultipleSessionsPerUser && existingValidSessionCount >= maxSessiontCountPerUser)
+			{
+				throw new SessionManagementException("User " + externalLinkData.getExternalUserId() + " has reached maximum active sessions.");
+			}
+
+			logger.info("Creating jwe token and session for userId: " + externalLinkData.getExternalUserId());
+			final String sessionId = UUID.randomUUID().toString();
+
+			final String jweToken = jwtUtils.generateAccessToken(externalLinkData.getExternalUserId(), sessionId);
+			final String refreshToken = jwtUtils.generateRefreshToken(externalLinkData.getExternalUserId(), sessionId);
+
+			final ExternalUserSessionDetails sessionDetails = new ExternalUserSessionDetails(
+					externalLinkData.getExternalUserId(),
+					bizId,
+					externalLinkData.getPayeeBizId(),
+					externalLinkData.getExternalUserEmailId(),
+					externalLinkData.getUuid(),
+					externalLinkData.getInvoiceId(),
+					sessionId,
+					refreshToken,
+					"PostAuthentication",
+					sessionTimeout);
+
+			sessionDetails.setAccessTokenExpiry(jwtUtils.getAccessTokenExpirationTime());
+			sessionDetails.setRefreshTokenExpiry(jwtUtils.getRefreshTokenExpirationTime());
+
+			logger.info("Registered Session for UUID:" + externalLinkData.getUuid() + " SessionId: " + sessionId);
+
+			sessionManagementDAO.storeExternalSessionDetails(sessionDetails);
+
+			sessionDetails.withAccessToken(jweToken);
+
+			return sessionDetails;
+		}
+		catch (DAOException e)
+		{
+			String message = "Unable to register session for UserId: " + externalLinkData.getExternalUserId() ;
+			logger.error(message + ". Reason: " + e.getMessage(), e);
+			throw new SessionManagementException(message);
+		}
+
+	}
+
+	@Override
 	public SessionDetails register(String userId) throws SessionManagementException
 	{
 		SessionDetails sessionDetails = null;
@@ -255,6 +313,26 @@ public class SessionManagementServiceImpl implements SessionManagementService
 	}
 
 	@Override
+	public boolean isValidJWE(String accessToken) throws SessionManagementException
+	{
+		//jwt validation
+		final Triple<String, String, Boolean> jweAuthResult = jwtUtils.authenticateAccessToken(accessToken);
+
+		if (!jweAuthResult.getRight())
+		{
+			return false;
+		}
+
+		//userId, sessionId validation
+		return isValid(jweAuthResult.getLeft(), jweAuthResult.getMiddle());
+	}
+
+	@Override
+	public String refreshJWEToken(String refreshToken) throws SessionManagementException{
+		return jwtUtils.refreshAccessToken(refreshToken);
+	}
+
+	@Override
 	public boolean isValid(String userId, String sessionId) throws SessionManagementException
 	{
 		boolean valid = false;
@@ -285,8 +363,7 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			logger.error(message + ". Reason: " + e.getMessage(), e);
 			throw new SessionManagementException(message);
 		}
-		//System.out.println("Validating Session for UserId:" + userId + " SessionId:"+sessionId + " Validation result: " + valid);
-		
+
 		return valid;
 	}
 
@@ -429,5 +506,17 @@ public class SessionManagementServiceImpl implements SessionManagementService
 			throw new SessionManagementException(msg);
 		}
 
+	}
+
+	//Need to move this to config
+	private String generateRandomKey(int size) {
+
+		SecureRandom secureRandom = new SecureRandom();
+
+		byte[] key = new byte[size];
+
+		secureRandom.nextBytes(key);
+
+		return Base64.getEncoder().encodeToString(key);
 	}
 }
